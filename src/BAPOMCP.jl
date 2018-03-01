@@ -111,17 +111,16 @@ Partially Observable Monte Carlo Planning Solver.
 end
 
 struct POMCPTree{A,O}
-    # for each observation-terminated history
-    total_n::Vector{Int}
-    children::Vector{Vector{Int}}
-    o_labels::Vector{O}
+    # for each observation node
+    total_n::Vector{Int}            #total number of times visited this node
+    children::Vector{Vector{Int}}   #children of node
+    o_labels::Vector{O}             #Observation label searched for this node
+    o_lookup::Dict{Tuple{Int, O}, Int}  #Look-up action node index + observation --> observation node index
 
-    o_lookup::Dict{Tuple{Int, O}, Int}
-
-    # for each action-terminated history
-    n::Vector{Int}
-    v::Vector{Float64}
-    a_labels::Vector{A}
+    # for each action node
+    n::Vector{Int}                  # number of times visited this node
+    v::Vector{Float64}              # Value of action node
+    a_labels::Vector{A}             # Action label selected for this node
 end
 
 function POMCPTree(pomdp::POMDP, sz::Int=1000)
@@ -141,6 +140,7 @@ function POMCPTree(pomdp::POMDP, sz::Int=1000)
                          )
 end
 
+#Returns index of observation node
 function insert_obs_node!(t::POMCPTree, pomdp::POMDP, ha::Int, o)
     push!(t.total_n, 0)
     push!(t.children, sizehint!(Int[], n_actions(pomdp)))
@@ -154,6 +154,7 @@ function insert_obs_node!(t::POMCPTree, pomdp::POMDP, ha::Int, o)
     return hao
 end
 
+#Returns index of action node
 function insert_action_node!(t::POMCPTree, h::Int, a)
     push!(t.n, 0)
     push!(t.v, 0.0)
@@ -178,6 +179,8 @@ mutable struct POMCPPlanner{P, SE, RNG} <: Policy
 end
 
 function POMCPPlanner(solver::POMCPSolver, pomdp::POMDP)
+    #Create a solved estimator to be used for MC Rollouts
+    #Uses rollout estimator random choice
     se = convert_estimator(solver.estimate_value, solver, pomdp)
     return POMCPPlanner(solver, pomdp, se, solver.rng, Int[], Nullable())
 end
@@ -187,7 +190,7 @@ Base.srand(p::POMCPPlanner, seed) = srand(p.rng, seed)
 
 function updater(p::POMCPPlanner)
     P = typeof(p.problem)
-    S = state_type(P)
+    S = state_type(P) #<<-----------------------------!!!!!!!!!!!!!!!!!!
     A = action_type(P)
     O = obs_type(P)
     if !@implemented ParticleFilters.obs_weight(::P, ::S, ::A, ::S, ::O)

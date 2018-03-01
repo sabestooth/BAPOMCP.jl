@@ -30,7 +30,7 @@ function search(p::POMCPPlanner, b, t::POMCPTree, info::Dict)
     all_terminal = true
     i = 0
     start_us = CPUtime_us()
-    #Cycle through all tree nodes that need to be searched
+    #Cycle for defined number of loops of sample+simulate to update policy
     for i in 1:p.solver.tree_queries
         #Check if search time has expired
         if CPUtime_us() - start_us >= 1e6*p.solver.max_time
@@ -80,6 +80,20 @@ struct Trans_Counts{S,A}
     M::Dict{Tuple{S,A,S}, Int}
 end
 
+#Rollout probably needs the current counts to do the updater()
+#Actually do a generate sp from s and action for particle filter
+# See https://github.com/JuliaPOMDP/ParticleFilters.jl
+function ParticleFilters.geneate_s(model::,s,a,rng::AbstractRNG)
+    sp = s
+    return sp
+end
+#Also do a generate observation probability distribution from new state sp and action taken.
+function ParticleFilters.observation(model::,a,sp)
+    obsDist = Array{Float}(n_obs(O)) #?????
+    return obsDist
+end
+#Where is the transition and observation probabilities used??
+
 #struct SA_Model{S}
 #    s::Vector{Tuple{S,Trans_Counts,Obs_Counts}}
 #end
@@ -88,7 +102,11 @@ end
 #end
 #END ADDED
 
+#Called per node visited, and with a specific state
+#Return the roll-up value of the an observation reward....., plus node at each
 function simulate(p::POMCPPlanner, s, hnode::POMCPObsNode, steps::Int)
+    #Checks for final step depth to expand, or if state is terminal for the problem
+    #Then end value accumulation
     if steps == 0 || isterminal(p.problem, s)
         return 0.0
     end
@@ -96,11 +114,18 @@ function simulate(p::POMCPPlanner, s, hnode::POMCPObsNode, steps::Int)
     t = hnode.tree
     h = hnode.node
 
+    #Get log of total number of times visited this observation node (h)
     ltn = log(t.total_n[h])
+
+    #Keep track of the equal value best nodes.
     best_nodes = empty!(p._best_node_mem)
     best_criterion_val = -Inf
+    #Search each action node of this observation node for best criterion value
     for node in t.children[h]
+        #get total number of times visited this action node
         n = t.n[node]
+
+        #Decide if should absolutely pick this node, or pick it based on its value, or pick it based on exploration
         if n == 0 && ltn <= 0.0
             criterion_value = t.v[node]
         elseif n == 0 && t.v[node] == -Inf
@@ -108,6 +133,8 @@ function simulate(p::POMCPPlanner, s, hnode::POMCPObsNode, steps::Int)
         else
             criterion_value = t.v[node] + p.solver.c*sqrt(ltn/n)
         end
+
+        #See if better node value, or same node value
         if criterion_value > best_criterion_val
             best_criterion_val = criterion_value
             empty!(best_nodes)
@@ -116,19 +143,21 @@ function simulate(p::POMCPPlanner, s, hnode::POMCPObsNode, steps::Int)
             push!(best_nodes, node)
         end
     end
+    #Sample the best node (if multiple of them with same value) randomly
     ha = rand(p.rng, best_nodes)
     a = t.a_labels[ha]
 
-    # Appears to be generate_sor() is where to add counts
-    # Also need to
-    #Algorithm 5 - use the expected model, not the generative one
-    #sa_model = generate_model(t_counts, o_counts)
-
+    #Given the best action a and the sampled state in the belief state, then get the s', o, r
     sp, o, r = generate_sor(p.problem, s, a, p.rng)
 
+    #Look-up the observation node under the current action node, else return 0
     hao = get(t.o_lookup, (ha, o), 0)
     if hao == 0
+        #No observation node under the action node, so add new observation node
         hao = insert_obs_node!(t, p.problem, ha, o)
+        #Estimate the value based on a state and observation node.
+        #This is where a random rollout is performed to determine value, with the current policy
+        #Dont think I need to add BA information in the rollout estimation
         v = estimate_value(p.solved_estimator,
                            p.problem,
                            sp,
@@ -136,12 +165,18 @@ function simulate(p::POMCPPlanner, s, hnode::POMCPObsNode, steps::Int)
                            steps-1)
         R = r + discount(p.problem)*v
     else
+        #Has observation node under the action node, so
         R = r + discount(p.problem)*simulate(p, sp, POMCPObsNode(t, hao), steps-1)
     end
 
+    #Increment number of times visited for observation and best action node picked.
     t.total_n[h] += 1
     t.n[ha] += 1
+
+    #Add the current reward, plus rollout of a new observation node, or the value of the next best action after this observation node
+    # minus the current value, divided by total times visited.
     t.v[ha] += (R-t.v[ha])/t.n[ha]
 
+    #Return future reward + current reward
     return R
 end
