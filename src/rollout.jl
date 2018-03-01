@@ -1,4 +1,4 @@
-struct PORollout
+struct PORollout # partially observable rollout
     solver::Union{POMDPs.Solver,POMDPs.Policy,Function}
     updater::POMDPs.Updater
 end

@@ -1,14 +1,14 @@
-# BasicPOMCP
+# BAPOMCP
 
-[![Build Status](https://travis-ci.org/JuliaPOMDP/BasicPOMCP.jl.svg?branch=master)](https://travis-ci.org/JuliaPOMDP/BasicPOMCP.jl)
-[![Coverage Status](https://coveralls.io/repos/JuliaPOMDP/BasicPOMCP.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/JuliaPOMDP/BasicPOMCP.jl?branch=master)
-[![codecov.io](http://codecov.io/github/JuliaPOMDP/BasicPOMCP.jl/coverage.svg?branch=master)](http://codecov.io/github/JuliaPOMDP/BasicPOMCP.jl?branch=master)
-
-The Partially Observable Monte Carlo Planning (POMCP) online solver for [POMDPs.jl](https://github.com/JuliaPOMDP/POMDPs.jl).
+The Bayesian Adaptive Partially Observable Monte Carlo Planning (POMCP) online solver for [POMDPs.jl](https://github.com/JuliaPOMDP/POMDPs.jl).
 
 Described in
 
-> Silver, D., & Veness, J. (2010). Monte-Carlo Planning in Large POMDPs. In *Advances in neural information processing systems* (pp. 2164–2172). Retrieved from http://discovery.ucl.ac.uk/1347369/
+> Silver, D., & Veness, J. (2010). Monte-Carlo Planning in Large POMDPs. In *Advances in neural information processing systems* (pp. 2164–2172). Retrieved from 
+http://papers.nips.cc/paper/4031-monte-carlo-planning-in-large-pomdps.pdf
+
+and extended to the Bayesian Adaptive framework in
+> Katt, S. (2017). Efficient Bayesian Learning in Factored Partially Observable Environments. Retrieved from https://esc.fnwi.uva.nl/thesis/centraal/files/f355157274.pdf
 
 Problems should be specified using the [POMDPs.jl](https://github.com/JuliaPOMDP/POMDPs.jl) interface. For more information, see the [POMDPs.jl documentation](http://juliapomdp.github.io/POMDPs.jl/latest/).
 

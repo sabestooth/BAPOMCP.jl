@@ -1,3 +1,6 @@
+#Choose the action based on the policy and belief
+#Performs search of Tree returning best action from top node
+#Can return tree info as second paramter
 function action_info(p::POMCPPlanner, b; tree_in_info=false)
     local a::action_type(p.problem)
     info = Dict{Symbol, Any}()
@@ -16,29 +19,41 @@ function action_info(p::POMCPPlanner, b; tree_in_info=false)
     return a, info
 end
 
+#Generic action selection based on policy and current belief
+#returns best action, after doing search of tree (first is because could return tree info as second parameter)
 action(p::POMCPPlanner, b) = first(action_info(p, b))
 
+#Takes a policy and searches the tree based on initial belief
+#Returns best action
+#This calls simulate() for each node open to search in the tree.
 function search(p::POMCPPlanner, b, t::POMCPTree, info::Dict)
     all_terminal = true
     i = 0
     start_us = CPUtime_us()
+    #Cycle through all tree nodes that need to be searched
     for i in 1:p.solver.tree_queries
+        #Check if search time has expired
         if CPUtime_us() - start_us >= 1e6*p.solver.max_time
             break
         end
-        s = rand(p.rng, b)
+        s = rand(p.rng, b) #SAMPLE State from belief <-----------!!!!!!!!!!!!!!!!!!!!!
+        #Check for terminal state in the problem;
         if !POMDPs.isterminal(p.problem, s)
+            #Not terminal, so simulate the random state selected, and add to tree;
             simulate(p, s, POMCPObsNode(t, 1), p.solver.max_depth)
             all_terminal = false
         end
     end
+    #Record search information
     info[:search_time_us] = CPUtime_us() - start_us
     info[:tree_queries] = i
 
+    #Account for nothing to search.
     if all_terminal
         throw(AllSamplesTerminal(b))
     end
 
+    #Search the roots children nodes (actions) for the best value
     h = 1
     best_node = first(t.children[h])
     best_v = t.v[best_node]
@@ -50,16 +65,34 @@ function search(p::POMCPPlanner, b, t::POMCPTree, info::Dict)
         end
     end
 
+    #Return best value's action
     return t.a_labels[best_node]
 end
 
 solve(solver::POMCPSolver, pomdp::POMDP) = POMCPPlanner(solver, pomdp)
 
+#I ADDED
+struct Obs_Counts{S,A,O}
+    M::Dict{Tuple{S,A,O}, Int}
+end
+
+struct Trans_Counts{S,A}
+    M::Dict{Tuple{S,A,S}, Int}
+end
+
+#struct SA_Model{S}
+#    s::Vector{Tuple{S,Trans_Counts,Obs_Counts}}
+#end
+
+#function generate_sa_model(t::Trans_Counts,o::Obs_Counts)
+#end
+#END ADDED
+
 function simulate(p::POMCPPlanner, s, hnode::POMCPObsNode, steps::Int)
     if steps == 0 || isterminal(p.problem, s)
         return 0.0
     end
-    
+
     t = hnode.tree
     h = hnode.node
 
@@ -85,6 +118,11 @@ function simulate(p::POMCPPlanner, s, hnode::POMCPObsNode, steps::Int)
     end
     ha = rand(p.rng, best_nodes)
     a = t.a_labels[ha]
+
+    # Appears to be generate_sor() is where to add counts
+    # Also need to
+    #Algorithm 5 - use the expected model, not the generative one
+    #sa_model = generate_model(t_counts, o_counts)
 
     sp, o, r = generate_sor(p.problem, s, a, p.rng)
 

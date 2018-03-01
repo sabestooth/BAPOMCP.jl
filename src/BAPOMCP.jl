@@ -1,6 +1,6 @@
 __precompile__()
 
-module BasicPOMCP
+module BAPOMCP
 
 #=
 Current constraints:
@@ -139,7 +139,7 @@ function POMCPTree(pomdp::POMDP, sz::Int=1000)
                           sizehint!(zeros(Float64, length(acts)), sz),
                           sizehint!(acts, sz)
                          )
-end    
+end
 
 function insert_obs_node!(t::POMCPTree, pomdp::POMDP, ha::Int, o)
     push!(t.total_n, 0)

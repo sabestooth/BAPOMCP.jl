@@ -1,4 +1,4 @@
-using BasicPOMCP
+using BAPOMCP
 using Base.Test
 using POMDPs
 using POMDPModels
