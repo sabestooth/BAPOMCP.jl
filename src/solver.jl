@@ -72,26 +72,99 @@ end
 solve(solver::POMCPSolver, pomdp::POMDP) = POMCPPlanner(solver, pomdp)
 
 #I ADDED
-struct Obs_Counts{S,A,O}
-    M::Dict{Tuple{S,A,O}, Int}
+#struct Obs_Counts{S,A,O}
+#    M::Dict{Tuple{S,A,O}, Int}
+#end
+
+#struct Trans_Counts{S,A}
+#    M::Dict{Tuple{S,A,S}, Int}
+#end
+
+#Get the observation probability
+#Base BAPOMDP state
+mutable struct BAPOMDPState{S}
+    s::S                        #State
+    oc::Vector{Int}             #Multi dimensional array: Array{Int}(S,A,O)
+    tc::Vector{Int}             #Multi dimensional array: Array{Int}(S,A,S)
+end
+#TODO: Improve to handle continuous, or infinite number of states
+#    oc::Dict{Tuple{S,A,O},Int}  #Observation counts
+#    tc::Dict{Tuple{S,A,S},Int}  #Transition counts
+
+
+function obs_count_prob(p::POMDP,s::BAPOMDPState,a,o)
+    s_idx = find(x -> x==s.s,states(p))
+    a_idx = find(x -> x==a,actions(p))
+    o_idx = find(x -> x==o,observations(p))
+    return first(s.oc[s_idx,a_idx,o_idx]/sum(s.oc[s_idx,a_idx,:])) #convert to scalar
 end
 
-struct Trans_Counts{S,A}
-    M::Dict{Tuple{S,A,S}, Int}
+#Get the transition probability
+function trans_count_prob(p::POMDP,s::BAPOMDPState,a,sp::BAPOMDPState)
+    s_idx = find(x -> x==s.s,states(p))
+    a_idx = find(x -> x==a,actions(p))
+    sp_idx = find(x -> x==sp.s,states(p))
+    return first(s.tc[s_idx,a_idx,sp_idx]/sum(s.tc[s_idx,a_idx,:])) #convert to scalar
 end
+
+#Get the distribution of transition probabilities
+function trans_count_dist(p::POMDP,s::BAPOMDPState,a)
+    s_idx = find(x -> x==s.s,states(p))
+    a_idx = find(x -> x==a,actions(p))
+    return reshape(s.tc[s_idx,a_idx,:]/sum(s.tc[s_idx,a_idx,:]),(n_states(p)))
+end
+
+#Initialize the BAPOMDP state
+function initiate_state(p::POMDP,s)
+    tc = ones(Int,POMDPs.n_states(p),POMDPs.n_actions(p),POMDPs.n_states(p))
+    oc = ones(Int,POMDPs.n_states(p),POMDPs.n_actions(p),POMDPs.n_observations(p))
+    return BAPOMDPState{state_type(p)}(s,oc,tc)
+end
+
+#Copy BAPOMDP state
+function copy(s::BAPOMDPState)
+    return BAPOMDPState(s.s,Base.copy(s.oc),Base.copy(s.tc))
+end
+
+#Increment the counts for the new sp
+function increment_trans_obs_counts(p::POMDP,s::BAPOMDPState,a,o,sp::BAPOMDPState)
+    s_idx = find(x -> x==s.s,states(p))
+    a_idx = find(x -> x==a,actions(p))
+    sp_idx = find(x -> x==sp.s,states(p))
+    o_idx = find(x -> x==o,observations(p))
+    sp.tc[s_idx,a_idx,sp_idx] += 1 #only can do transition at this time, observation will be updated later
+    sp.oc[s_idx,a_idx,o_idx] += 1 #only can do transition at this time, observation will be updated later
+end
+
 
 #Rollout probably needs the current counts to do the updater()
 #Actually do a generate sp from s and action for particle filter
 # See https://github.com/JuliaPOMDP/ParticleFilters.jl
-function ParticleFilters.geneate_s(model::,s,a,rng::AbstractRNG)
-    sp = s
+#See the SimpleParticleFilter update function calls these two functions
+#https://github.com/JuliaPOMDP/ParticleFilters.jl/blob/master/src/ParticleFilters.jl
+#Add all probability to the obs_weight, and the generate_s should just be a random state
+function ParticleFilters.generate_s(model::POMDP,s::BAPOMDPState,a,rng::AbstractRNG)
+    sp = copy(s)
+    s_index = rand(Categorical(trans_count_dist(model,s,a))) #Handle states that are not integers
+    sp.s = states(model)[s_index]
     return sp
 end
-#Also do a generate observation probability distribution from new state sp and action taken.
-function ParticleFilters.observation(model::,a,sp)
-    obsDist = Array{Float}(n_obs(O)) #?????
-    return obsDist
+
+#OUtput of this is put into a WeightedParticleBelief, paired with the output of the generate_s() above
+#only just the probability of sp + o, given a + s; P(s',o | a,s)
+#NOTE: Modifying the sp counts.
+function ParticleFilters.obs_weight(model::POMDP,a,s::BAPOMDPState,sp::BAPOMDPState,o)
+    increment_trans_obs_counts(model,s,a,o,sp)
+    return obs_count_prob(model,s,a,o) * trans_count_prob(model,s,a,sp) #merge the observation and transition probabilities together
 end
+
+
+#Also do a generate observation probability distribution from new state sp and action taken.
+#Don't need, just need obs_weight; unless it is unweighted
+#function ParticleFilters.observation(model::,a,sp)
+#    obsDist = Array{Float}(n_obs(O)) #?????
+#    return obsDist
+#end
 #Where is the transition and observation probabilities used??
 
 #struct SA_Model{S}

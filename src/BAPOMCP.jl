@@ -16,6 +16,7 @@ using POMDPToolbox
 using ParticleFilters
 using CPUTime
 using Colors
+using Distributions
 
 import POMDPs: action, solve, updater, requirements_info
 import POMDPToolbox: action_info
@@ -140,6 +141,8 @@ function POMCPTree(pomdp::POMDP, sz::Int=1000)
                          )
 end
 
+"""DEFINE TREE
+"""
 #Returns index of observation node
 function insert_obs_node!(t::POMCPTree, pomdp::POMDP, ha::Int, o)
     push!(t.total_n, 0)
@@ -169,6 +172,8 @@ struct POMCPObsNode{A,O} <: BeliefNode
     node::Int
 end
 
+"""DEFINE POLICY (i.e. Planner)
+"""
 mutable struct POMCPPlanner{P, SE, RNG} <: Policy
     solver::POMCPSolver
     problem::P
